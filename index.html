@@ -196,15 +196,17 @@
     }
     if (performance.now() - lastAutosave > 5000){
       lastAutosave = performance.now();
-      try { localStorage.setItem(LSKEY, JSON.stringify({v:1, at:Date.now(), samples:log, gps:gps})); } catch(_){}
+      // 退避は直近10分ぶん（約36000サンプル）まで。Safari の localStorage は
+      // 5MB 程度で頭打ちになるため、全量を書くと長時間記録で保護が死ぬ。
+      var KEEP = 36000;
+      var part = log.length > KEEP ? log.slice(-KEEP) : log;
+      try { localStorage.setItem(LSKEY, JSON.stringify({v:1, at:Date.now(), trunc:log.length>KEEP, samples:part, gps:gps})); } catch(_){}
     }
   }
 
-  function begin(){
-    recording = true; t0 = performance.now(); log = []; gps = [];
-    window.addEventListener('devicemotion', onMotion);
-    if ($('gpsChk').checked && navigator.geolocation){
-      gpsWatch = navigator.geolocation.watchPosition(function(pos){
+  function startGps(){
+    if (gpsWatch !== null || !navigator.geolocation) return;
+    gpsWatch = navigator.geolocation.watchPosition(function(pos){
         if (!recording) return;
         var c = pos.coords;
         gps.push({
@@ -216,29 +218,45 @@
         });
         var kmh = c.speed === null ? '—' : (c.speed*3.6).toFixed(1) + 'km/h';
         $('rgps').textContent = kmh + ' / ±' + (c.accuracy||0).toFixed(0) + 'm';
-      }, function(err){
-        $('rgps').textContent = '取得不可(' + err.code + ')';
-      }, { enableHighAccuracy: true, maximumAge: 0 });
-    }
+    }, function(err){
+      $('rgps').textContent = '取得不可(' + err.code + ')';
+    }, { enableHighAccuracy: true, maximumAge: 0 });
+  }
+  function stopGps(){
+    if (gpsWatch !== null){ navigator.geolocation.clearWatch(gpsWatch); gpsWatch = null; }
+    $('rgps').textContent = '—';
+  }
+  // 記録中でもチェックの切替に追従する
+  $('gpsChk').addEventListener('change', function(){
+    if (!recording) return;
+    if ($('gpsChk').checked) startGps(); else stopGps();
+  });
+
+  function begin(){
+    recording = true; t0 = performance.now(); log = []; gps = [];
+    window.addEventListener('devicemotion', onMotion);
+    if ($('gpsChk').checked) startGps();
     $('rec').innerHTML = '■ 記録停止';
     $('rec').classList.add('rec-on');
     $('led').classList.add('on');
     $('sSt').textContent = 'REC';
     $('save').disabled = $('clear').disabled = true;
-    msg('記録中。走らせてください。', 'ok');
+    msg('記録中。最初の1〜2秒は静止させてから走らせてください（基準取りに使います）。', 'ok');
     if ('wakeLock' in navigator) navigator.wakeLock.request('screen').catch(function(){});
   }
 
   function stop(){
     recording = false;
     window.removeEventListener('devicemotion', onMotion);
-    if (gpsWatch !== null){ navigator.geolocation.clearWatch(gpsWatch); gpsWatch = null; }
+    stopGps();
     $('rec').innerHTML = '● 記録開始';
     $('rec').classList.remove('rec-on');
     $('led').classList.remove('on');
     $('sSt').textContent = '停止';
     $('save').disabled = $('clear').disabled = log.length === 0;
-    try { localStorage.setItem(LSKEY, JSON.stringify({v:1, at:Date.now(), samples:log, gps:gps})); } catch(_){}
+    var KEEP2 = 36000;
+    var part2 = log.length > KEEP2 ? log.slice(-KEEP2) : log;
+    try { localStorage.setItem(LSKEY, JSON.stringify({v:1, at:Date.now(), trunc:log.length>KEEP2, samples:part2, gps:gps})); } catch(_){}
     stampName();   // 記録した時刻に更新（手入力があれば触らない）
     msg(log.length + ' サンプル記録しました（GPS ' + gps.length + '点）。「書き出し」で保存してください。', 'ok');
   }
