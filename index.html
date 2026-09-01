@@ -131,7 +131,7 @@
       </div>
       <div class="hint">
         書き出したファイルを Slack で共有してください。<br>
-        記録中は5秒ごとに端末内へ自動退避します（ブラウザが落ちても残ります）。
+        記録中は5秒ごとに端末内へ自動退避します（ブラウザが落ちても直前まで残ります）。
       </div>
     </fieldset>
 
@@ -164,18 +164,75 @@
     m.className = 'statusbar' + (cls ? ' ' + cls : '');
   }
 
-  try {
-    var prev = localStorage.getItem(LSKEY);
-    if (prev){
+  /* ---- クラッシュ保護 ----
+   * 5秒ごとに「前回書いた続きから」の差分を IndexedDB に追記する。
+   * localStorage(約5MB)と違い実質容量制限がないので、何分回しても
+   * クラッシュ直前のフラッシュまで全部残る。IndexedDB が使えない環境では
+   * localStorage に直近ぶんだけ退避する（保険の保険）。
+   */
+  var idb = null, flushedN = 0, flushedG = 0;
+  function idbStore(mode){ return idb.transaction('chunks', mode).objectStore('chunks'); }
+  function flushBackup(){
+    if (!idb){
+      var KEEP = 36000;
+      var part = log.length > KEEP ? log.slice(-KEEP) : log;
+      try { localStorage.setItem(LSKEY, JSON.stringify({v:1, at:Date.now(), trunc:log.length>KEEP, samples:part, gps:gps})); } catch(_){}
+      return;
+    }
+    var ns = log.slice(flushedN), ng = gps.slice(flushedG);
+    if (!ns.length && !ng.length) return;
+    try {
+      idbStore('readwrite').add({ at: Date.now(), samples: ns, gps: ng });
+      flushedN = log.length; flushedG = gps.length;
+    } catch(_){}
+  }
+  function clearBackup(){
+    flushedN = 0; flushedG = 0;
+    if (idb) try { idbStore('readwrite').clear(); } catch(_){}
+    try { localStorage.removeItem(LSKEY); } catch(_){}
+  }
+  function offerRecovered(n){
+    $('sN').textContent = n;
+    $('save').disabled = $('clear').disabled = false;
+    msg('前回の記録（' + n + 'サンプル）が残っています。「書き出し」で保存するか「破棄」してください。', 'ok');
+  }
+  function recoverLS(){
+    try {
+      var prev = localStorage.getItem(LSKEY);
+      if (!prev) return;
       var pj = JSON.parse(prev);
       if (pj && pj.samples && pj.samples.length > 30){
         log = pj.samples; gps = pj.gps || [];
-        $('sN').textContent = log.length;
-        $('save').disabled = $('clear').disabled = false;
-        msg('前回の記録（' + log.length + 'サンプル）が残っています。「書き出し」で保存するか「破棄」してください。', 'ok');
+        offerRecovered(log.length);
       }
-    }
-  } catch(_){}
+    } catch(_){}
+  }
+  (function(){
+    try {
+      var rq = indexedDB.open('ee-logger', 1);
+      rq.onupgradeneeded = function(){ rq.result.createObjectStore('chunks', { autoIncrement: true }); };
+      rq.onerror = function(){ recoverLS(); };
+      rq.onsuccess = function(){
+        idb = rq.result;
+        try {
+          var out = [], og = [];
+          var cur = idbStore('readonly').openCursor();
+          cur.onsuccess = function(){
+            var c = cur.result;
+            if (c){
+              out = out.concat(c.value.samples || []);
+              og = og.concat(c.value.gps || []);
+              c.continue();
+            } else if (out.length > 30 && !recording && log.length === 0){
+              log = out; gps = og;
+              flushedN = log.length; flushedG = gps.length;
+              offerRecovered(log.length);
+            }
+          };
+        } catch(_){ recoverLS(); }
+      };
+    } catch(e){ recoverLS(); }
+  })();
 
   function onMotion(e){
     if (!recording) return;
@@ -196,11 +253,7 @@
     }
     if (performance.now() - lastAutosave > 5000){
       lastAutosave = performance.now();
-      // 退避は直近10分ぶん（約36000サンプル）まで。Safari の localStorage は
-      // 5MB 程度で頭打ちになるため、全量を書くと長時間記録で保護が死ぬ。
-      var KEEP = 36000;
-      var part = log.length > KEEP ? log.slice(-KEEP) : log;
-      try { localStorage.setItem(LSKEY, JSON.stringify({v:1, at:Date.now(), trunc:log.length>KEEP, samples:part, gps:gps})); } catch(_){}
+      flushBackup();
     }
   }
 
@@ -234,6 +287,7 @@
 
   function begin(){
     recording = true; t0 = performance.now(); log = []; gps = [];
+    clearBackup();
     window.addEventListener('devicemotion', onMotion);
     if ($('gpsChk').checked) startGps();
     $('rec').innerHTML = '■ 記録停止';
@@ -254,9 +308,7 @@
     $('led').classList.remove('on');
     $('sSt').textContent = '停止';
     $('save').disabled = $('clear').disabled = log.length === 0;
-    var KEEP2 = 36000;
-    var part2 = log.length > KEEP2 ? log.slice(-KEEP2) : log;
-    try { localStorage.setItem(LSKEY, JSON.stringify({v:1, at:Date.now(), trunc:log.length>KEEP2, samples:part2, gps:gps})); } catch(_){}
+    flushBackup();
     stampName();   // 記録した時刻に更新（手入力があれば触らない）
     msg(log.length + ' サンプル記録しました（GPS ' + gps.length + '点）。「書き出し」で保存してください。', 'ok');
   }
@@ -292,7 +344,7 @@
   $('clear').addEventListener('click', function(){
     if (!confirm('記録を破棄します。よろしいですか？')) return;
     log = []; gps = [];
-    try { localStorage.removeItem(LSKEY); } catch(_){}
+    clearBackup();
     $('sN').textContent = '0';
     $('save').disabled = $('clear').disabled = true;
     msg('破棄しました。');
