@@ -124,13 +124,13 @@
 
     <fieldset>
       <legend>保存</legend>
-      <input type="text" id="logName" placeholder="記録の名前（例: 山田・駐車場1）">
+      <input type="text" id="logName" placeholder="記録の名前">
       <div class="row" style="margin-top:0">
         <button id="save" disabled>書き出し(JSON)</button>
         <button id="clear" disabled>破棄</button>
       </div>
       <div class="hint">
-        書き出したファイルを LINE やメールで依頼主に送ってください。<br>
+        書き出したファイルを Slack で共有してください。<br>
         記録中は5秒ごとに端末内へ自動退避します（ブラウザが落ちても残ります）。
       </div>
     </fieldset>
@@ -145,6 +145,19 @@
   var $ = function(id){ return document.getElementById(id); };
   var LSKEY = 'ee-sensor-log-autosave';
   var recording = false, log = [], gps = [], t0 = 0, lastAutosave = 0, gpsWatch = null;
+
+  // 名前欄にタイムスタンプを自動で入れる。手で書き換えた内容は上書きしない
+  var lastAuto = '';
+  function stampName(force){
+    var v = $('logName').value;
+    if (!force && v && v !== lastAuto) return;
+    var d = new Date();
+    var p2 = function(n){ return (n < 10 ? '0' : '') + n; };
+    lastAuto = d.getFullYear() + '-' + p2(d.getMonth()+1) + '-' + p2(d.getDate()) +
+               '_' + p2(d.getHours()) + p2(d.getMinutes());
+    $('logName').value = lastAuto;
+  }
+  stampName(true);
 
   function msg(text, cls){
     var m = $('msg'); m.textContent = text;
@@ -226,6 +239,7 @@
     $('sSt').textContent = '停止';
     $('save').disabled = $('clear').disabled = log.length === 0;
     try { localStorage.setItem(LSKEY, JSON.stringify({v:1, at:Date.now(), samples:log, gps:gps})); } catch(_){}
+    stampName();   // 記録した時刻に更新（手入力があれば触らない）
     msg(log.length + ' サンプル記録しました（GPS ' + gps.length + '点）。「書き出し」で保存してください。', 'ok');
   }
 
@@ -254,7 +268,7 @@
     a.download = name.replace(/[\\/:*?"<>|\s]+/g, '_') + '.json';
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(function(){ URL.revokeObjectURL(a.href); }, 4000);
-    msg('共有シートが開いたら「ファイルに保存」を選び、そのファイルを依頼主に送ってください。', 'ok');
+    msg('共有シートが開いたら「ファイルに保存」を選び、そのファイルを Slack で共有してください。', 'ok');
   });
 
   $('clear').addEventListener('click', function(){
