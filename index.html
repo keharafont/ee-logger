@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="ja">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>EEセンサーロガー</title>
+<style>
+  /* ---- Windows 95 ---- */
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;border-radius:0 !important}
+  html,body{margin:0;min-height:100%}
+  body{
+    background:#008080;   /* あのデスクトップ */
+    font-family:"MS UI Gothic","MS PGothic",Tahoma,"Hiragino Sans",sans-serif;
+    font-size:14px;line-height:1.45;color:#000;
+    padding:max(10px,env(safe-area-inset-top)) 8px max(14px,env(safe-area-inset-bottom));
+  }
+  .window{
+    max-width:430px;margin:0 auto;background:#c0c0c0;
+    border:2px solid;border-color:#fff #404040 #404040 #fff;
+    box-shadow:1px 1px 0 #000;
+    padding:2px;
+  }
+  .titlebar{
+    background:linear-gradient(90deg,#000080,#1084d0);
+    color:#fff;font-weight:bold;font-size:13px;
+    padding:4px 6px;display:flex;align-items:center;gap:6px;
+    user-select:none;
+  }
+  .titlebar .ico{width:14px;height:14px;background:#c0c0c0;border:1px solid #000;
+    display:inline-flex;align-items:center;justify-content:center;font-size:9px;color:#000}
+  .titlebar .sp{flex:1}
+  .tbtn{
+    width:18px;height:16px;background:#c0c0c0;color:#000;
+    border:2px solid;border-color:#fff #404040 #404040 #fff;
+    font-size:10px;line-height:1;display:inline-flex;align-items:center;justify-content:center;
+  }
+  .body{padding:10px 8px 8px}
+
+  fieldset{
+    border:2px groove #fff;margin:0 0 10px;padding:8px;
+  }
+  legend{font-size:12px;padding:0 4px}
+
+  button{
+    font:inherit;background:#c0c0c0;color:#000;width:100%;
+    border:2px solid;border-color:#fff #404040 #404040 #fff;
+    box-shadow:1px 1px 0 #000;
+    padding:10px 8px;min-height:44px;
+  }
+  button:active{border-color:#404040 #fff #fff #404040;box-shadow:none;transform:translate(1px,1px)}
+  button[disabled]{color:#808080;text-shadow:1px 1px 0 #fff}
+  button.big{font-weight:bold;font-size:16px;padding:14px 8px}
+  .rec-on{color:#a00000;font-weight:bold}
+  .row{display:flex;gap:6px;margin-top:6px}
+  .row button{flex:1}
+
+  .well{
+    background:#fff;border:2px solid;border-color:#404040 #fff #fff #404040;
+    padding:6px 8px;font-family:"Courier New",ui-monospace,monospace;font-size:13px;
+  }
+  table{width:100%;border-collapse:collapse;font-family:"Courier New",ui-monospace,monospace;font-size:12px}
+  td{padding:2px 0}
+  td:first-child{width:46%}
+  td:last-child{text-align:right}
+
+  .stat{display:flex;gap:6px;margin-bottom:10px}
+  .stat .well{flex:1;text-align:center;padding:5px 4px}
+  .stat .k{font-family:inherit;font-size:10px;color:#404040}
+  .stat .v{font-weight:bold;font-size:15px}
+  .led{display:inline-block;width:9px;height:9px;background:#808080;border:1px solid #404040;vertical-align:middle}
+  .led.on{background:#e00000}
+
+  label.chk{display:flex;align-items:center;gap:8px;padding:6px 2px;font-size:13px}
+  input[type=checkbox]{width:18px;height:18px}
+
+  input[type=text]{
+    font:inherit;width:100%;background:#fff;color:#000;
+    border:2px solid;border-color:#404040 #fff #fff #404040;
+    padding:9px 8px;margin-bottom:6px;
+  }
+  .statusbar{
+    margin-top:4px;background:#c0c0c0;
+    border:2px solid;border-color:#404040 #fff #fff #404040;
+    padding:4px 8px;font-size:12px;min-height:2.4em;
+  }
+  .statusbar.err{color:#a00000}
+  .statusbar.ok{color:#006000}
+  .hint{font-size:11px;color:#404040;line-height:1.6;margin-top:8px}
+</style>
+
+<div class="window">
+  <div class="titlebar">
+    <span class="ico">EE</span>
+    <span>EEセンサーロガー.exe</span>
+    <span class="sp"></span>
+    <span class="tbtn">_</span><span class="tbtn">×</span>
+  </div>
+  <div class="body">
+
+    <div class="stat">
+      <div class="well"><div class="k">状態</div><div class="v"><span class="led" id="led"></span> <span id="sSt">待機</span></div></div>
+      <div class="well"><div class="k">サンプル</div><div class="v" id="sN">0</div></div>
+      <div class="well"><div class="k">時間</div><div class="v" id="sT">0s</div></div>
+    </div>
+
+    <button class="big" id="rec">● 記録開始</button>
+
+    <fieldset>
+      <legend>オプション</legend>
+      <label class="chk"><input type="checkbox" id="gpsChk"> GPS も記録する（位置と速度が残ります）</label>
+    </fieldset>
+
+    <fieldset>
+      <legend>ライブ</legend>
+      <div class="well">
+        <table>
+          <tr><td>ジャイロ x/y/z (°/s)</td><td id="rg">—</td></tr>
+          <tr><td>加速度 x/y/z (m/s²)</td><td id="ra">—</td></tr>
+          <tr><td>GPS 速度 / 精度</td><td id="rgps">—</td></tr>
+        </table>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>保存</legend>
+      <input type="text" id="logName" placeholder="記録の名前（例: 山田・駐車場1）">
+      <div class="row" style="margin-top:0">
+        <button id="save" disabled>書き出し(JSON)</button>
+        <button id="clear" disabled>破棄</button>
+      </div>
+      <div class="hint">
+        書き出したファイルを LINE やメールで依頼主に送ってください。<br>
+        記録中は5秒ごとに端末内へ自動退避します（ブラウザが落ちても残ります）。
+      </div>
+    </fieldset>
+
+    <div class="statusbar" id="msg">「記録開始」を押すとセンサーの許可を求めます。iPhone を車体にしっかり固定してください。</div>
+  </div>
+</div>
+
+<script>
+(function(){
+  'use strict';
+  var $ = function(id){ return document.getElementById(id); };
+  var LSKEY = 'ee-sensor-log-autosave';
+  var recording = false, log = [], gps = [], t0 = 0, lastAutosave = 0, gpsWatch = null;
+
+  function msg(text, cls){
+    var m = $('msg'); m.textContent = text;
+    m.className = 'statusbar' + (cls ? ' ' + cls : '');
+  }
+
+  try {
+    var prev = localStorage.getItem(LSKEY);
+    if (prev){
+      var pj = JSON.parse(prev);
+      if (pj && pj.samples && pj.samples.length > 30){
+        log = pj.samples; gps = pj.gps || [];
+        $('sN').textContent = log.length;
+        $('save').disabled = $('clear').disabled = false;
+        msg('前回の記録（' + log.length + 'サンプル）が残っています。「書き出し」で保存するか「破棄」してください。', 'ok');
+      }
+    }
+  } catch(_){}
+
+  function onMotion(e){
+    if (!recording) return;
+    var a = e.accelerationIncludingGravity || {x:0,y:0,z:0};
+    var r = e.rotationRate || {alpha:0,beta:0,gamma:0};
+    log.push({
+      t: +(performance.now() - t0).toFixed(1),
+      ax: +(a.x||0).toFixed(4), ay: +(a.y||0).toFixed(4), az: +(a.z||0).toFixed(4),
+      gx: +(r.beta||0).toFixed(3), gy: +(r.gamma||0).toFixed(3), gz: +(r.alpha||0).toFixed(3)
+    });
+    var n = log.length;
+    if (n % 12 === 0){
+      $('sN').textContent = n;
+      $('sT').textContent = ((performance.now()-t0)/1000).toFixed(0) + 's';
+      var f = log[n-1];
+      $('rg').textContent = f.gx.toFixed(1)+' / '+f.gy.toFixed(1)+' / '+f.gz.toFixed(1);
+      $('ra').textContent = f.ax.toFixed(2)+' / '+f.ay.toFixed(2)+' / '+f.az.toFixed(2);
+    }
+    if (performance.now() - lastAutosave > 5000){
+      lastAutosave = performance.now();
+      try { localStorage.setItem(LSKEY, JSON.stringify({v:1, at:Date.now(), samples:log, gps:gps})); } catch(_){}
+    }
+  }
+
+  function begin(){
+    recording = true; t0 = performance.now(); log = []; gps = [];
+    window.addEventListener('devicemotion', onMotion);
+    if ($('gpsChk').checked && navigator.geolocation){
+      gpsWatch = navigator.geolocation.watchPosition(function(pos){
+        if (!recording) return;
+        var c = pos.coords;
+        gps.push({
+          t: +(performance.now() - t0).toFixed(0),
+          lat: +c.latitude.toFixed(7), lon: +c.longitude.toFixed(7),
+          spd: c.speed === null ? null : +c.speed.toFixed(2),
+          hdg: c.heading === null ? null : +c.heading.toFixed(1),
+          acc: c.accuracy === null ? null : +c.accuracy.toFixed(1)
+        });
+        var kmh = c.speed === null ? '—' : (c.speed*3.6).toFixed(1) + 'km/h';
+        $('rgps').textContent = kmh + ' / ±' + (c.accuracy||0).toFixed(0) + 'm';
+      }, function(err){
+        $('rgps').textContent = '取得不可(' + err.code + ')';
+      }, { enableHighAccuracy: true, maximumAge: 0 });
+    }
+    $('rec').innerHTML = '■ 記録停止';
+    $('rec').classList.add('rec-on');
+    $('led').classList.add('on');
+    $('sSt').textContent = 'REC';
+    $('save').disabled = $('clear').disabled = true;
+    msg('記録中。走らせてください。', 'ok');
+    if ('wakeLock' in navigator) navigator.wakeLock.request('screen').catch(function(){});
+  }
+
+  function stop(){
+    recording = false;
+    window.removeEventListener('devicemotion', onMotion);
+    if (gpsWatch !== null){ navigator.geolocation.clearWatch(gpsWatch); gpsWatch = null; }
+    $('rec').innerHTML = '● 記録開始';
+    $('rec').classList.remove('rec-on');
+    $('led').classList.remove('on');
+    $('sSt').textContent = '停止';
+    $('save').disabled = $('clear').disabled = log.length === 0;
+    try { localStorage.setItem(LSKEY, JSON.stringify({v:1, at:Date.now(), samples:log, gps:gps})); } catch(_){}
+    msg(log.length + ' サンプル記録しました（GPS ' + gps.length + '点）。「書き出し」で保存してください。', 'ok');
+  }
+
+  $('rec').addEventListener('click', function(){
+    if (recording){ stop(); return; }
+    if (!window.isSecureContext){ msg('HTTPS でないとセンサー許可が出せません。https:// で開いてください。', 'err'); return; }
+    if (typeof DeviceMotionEvent === 'undefined'){ msg('この端末はモーションセンサーに対応していません。', 'err'); return; }
+    if (typeof DeviceMotionEvent.requestPermission === 'function'){
+      DeviceMotionEvent.requestPermission().then(function(res){
+        if (res === 'granted') begin();
+        else msg('許可されませんでした。設定 → Safari → モーションとジャイロのアクセス を ON に。', 'err');
+      }).catch(function(err){ msg('許可要求に失敗: ' + err.message, 'err'); });
+    } else begin();
+  });
+
+  $('save').addEventListener('click', function(){
+    var name = ($('logName').value || '').trim() || ('imu-log-' + new Date().toISOString().replace(/[:.]/g,'-').slice(0,19));
+    var meta = {
+      v: 1, kind: 'ee-imu-log', name: name, recordedAt: new Date().toISOString(),
+      hz: log.length > 1 ? +(1000 / (log[log.length-1].t / (log.length-1))).toFixed(1) : 0,
+      samples: log, gps: gps
+    };
+    var blob = new Blob([JSON.stringify(meta)], { type: 'application/json' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name.replace(/[\\/:*?"<>|\s]+/g, '_') + '.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); }, 4000);
+    msg('共有シートが開いたら「ファイルに保存」を選び、そのファイルを依頼主に送ってください。', 'ok');
+  });
+
+  $('clear').addEventListener('click', function(){
+    if (!confirm('記録を破棄します。よろしいですか？')) return;
+    log = []; gps = [];
+    try { localStorage.removeItem(LSKEY); } catch(_){}
+    $('sN').textContent = '0';
+    $('save').disabled = $('clear').disabled = true;
+    msg('破棄しました。');
+  });
+})();
+</script>
+</html>
