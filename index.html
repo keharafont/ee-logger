@@ -272,7 +272,11 @@
         var kmh = c.speed === null ? '—' : (c.speed*3.6).toFixed(1) + 'km/h';
         $('rgps').textContent = kmh + ' / ±' + (c.accuracy||0).toFixed(0) + 'm';
     }, function(err){
-      $('rgps').textContent = '取得不可(' + err.code + ')';
+      // 1=許可拒否 / 2=測位不可 / 3=タイムアウト
+      $('rgps').textContent = err.code === 1 ? '許可が必要' : err.code === 2 ? '測位不可' : 'タイムアウト';
+      if (err.code === 1){
+        msg('位置情報が拒否されています。iPhone: 設定 → プライバシー → 位置情報サービス → Safariのウェブサイト を「使用中のみ許可」にし、Safari のアドレスバー「ぁあ」→ Webサイトの設定 → 位置情報 → 許可 → ページを再読み込み。GPS無しでもセンサー記録は有効です。', 'err');
+      }
     }, { enableHighAccuracy: true, maximumAge: 0 });
   }
   function stopGps(){
